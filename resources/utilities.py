@@ -11,14 +11,7 @@ import os
 import binascii
 import argparse
 
-try:
-    import requests
-except ImportError:
-    subprocess.run(["pip3", "install", "requests"], stdout=subprocess.PIPE)
-    try:
-        import requests
-    except ImportError:
-        raise Exception("Missing requests library!\nPlease run the following before starting OCLP:\npip3 install requests")
+import requests
 
 from resources import constants, ioreg
 from data import sip_data
