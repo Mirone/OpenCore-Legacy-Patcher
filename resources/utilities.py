@@ -349,6 +349,22 @@ def check_cli_args():
     else:
         return args
 
+
+def show_macos_drives():
+    # List macOS drives
+    drives = []
+    for drive in Path("/Volumes").iterdir():
+        if drive.is_dir() and drive.name.endswith(" - Data"):
+            # Strip the - Data from the end of the name
+            partition_info = plistlib.loads(subprocess.run(f"diskutil info -plist /Volumes/{drive.name[:-7]}".split(), stdout=subprocess.PIPE).stdout.decode().strip().encode())
+            mount_path = partition_info["DeviceIdentifier"]
+            drives.append(f"{drive.name[:-7]}: {mount_path}")
+
+    print("- Available Drives:")
+    for drive in drives:
+        print(f"- {drive}")
+                        
+    
 # def menu(title, prompt, menu_options, add_quit=True, auto_number=False, in_between=[], top_level=False):
 #     return_option = ["Q", "Quit", None] if top_level else ["B", "Back", None]
 #     if add_quit: menu_options.append(return_option)

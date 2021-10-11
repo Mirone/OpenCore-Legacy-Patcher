@@ -45,7 +45,11 @@ class PatchSysVolume:
         self.validate = False
         self.supports_metal = False
 
-        if self.constants.detected_os > self.constants.catalina:
+        if utilities.check_recovery():
+            if not Path("/Volumes/mnt1").exists():
+                utilities.elevated(["mkdir", "/Volumes/mnt1"], stdout=subprocess.PIPE).stdout.decode().strip().encode()
+            self.mount_location = "/Volumes/mnt1"
+        elif self.constants.detected_os > self.constants.catalina:
             # Big Sur and newer use APFS snapshots
             self.mount_location = "/System/Volumes/Update/mnt1"
         else:
@@ -57,9 +61,29 @@ class PatchSysVolume:
         self.mount_private_frameworks = f"{self.mount_location}/System/Library/PrivateFrameworks"
         self.mount_libexec = f"{self.mount_location}/usr/libexec"
         self.mount_extensions_mux = f"{self.mount_location}/System/Library/Extensions/AppleGraphicsControl.kext/Contents/PlugIns/"
+    
+    def recovery_drive_selection(self):
+        drive = input("- Drive to mount (diskXsY): ")
+        return drive
 
     def find_mount_root_vol(self, patch):
-        self.root_mount_path = utilities.get_disk_path()
+        if utilities.check_recovery():
+            # Prompt user for drive to mount
+            print("- Detected Recovery Mode, please select the drive to mount")
+            utilities.show_macos_drives()
+            self.root_mount_path = self.recovery_drive_selection()
+            if not self.root_mount_path.startswith("disk"):
+                print("- Invalid drive path, please try again")
+                self.root_mount_path = self.recovery_drive_selection()
+                if not self.root_mount_path.startswith("disk"):
+                    print("- Invalid drive path, exiting")
+                    exit(1)
+        else:
+            self.root_mount_path = utilities.get_disk_path()
+
+
+
+
         if self.root_mount_path.startswith("disk"):
             if self.constants.detected_os == self.constants.catalina and self.validate is False:
                 print("- Mounting Catalina Root Volume as writable")
@@ -236,7 +260,7 @@ class PatchSysVolume:
                     input("Press [ENTER] to continue with kernel and dyld cache merging")
             if self.constants.detected_os > self.constants.catalina:
                 print("- Creating new APFS snapshot")
-                utilities.elevated(["bless", "--folder", f"{self.mount_location}/System/Library/CoreServices", "--bootefi", "--create-snapshot"], stdout=subprocess.PIPE).stdout.decode().strip().encode()
+                utilities.elevated(["bless", "--mount", self.mount_location, "--bootefi", "--create-snapshot"], stdout=subprocess.PIPE).stdout.decode().strip().encode()
                 self.unmount_drive()
             else:
                 if self.constants.detected_os == self.constants.catalina:
@@ -418,7 +442,7 @@ set million colour before rebooting"""
         if self.constants.detected_os == self.constants.monterey:
             print("- Installing IvyBridge Acceleration Kext patches for Monterey")
             self.add_new_binaries(sys_patch_data.AddIntelGen3Accel, self.constants.legacy_intel_gen3_path)
-            if self.validate is False:
+            if self.validate is False and not utilities.check_recovery():
                 print("- Fixing Acceleration in CoreMedia")
                 utilities.process_status(subprocess.run(["defaults", "write", "com.apple.coremedia", "hardwareVideoDecoder", "-string", "enable"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT))
             print("- Merging Ivy Bridge Frameworks")
@@ -473,7 +497,7 @@ set million colour before rebooting"""
 
         print("- Merging TeraScale 2 PrivateFrameworks")
         utilities.elevated(["rsync", "-r", "-i", "-a", f"{self.constants.payload_apple_private_frameworks_path_accel_ts2}/", self.mount_private_frameworks], stdout=subprocess.PIPE)
-        if self.validate is False:
+        if self.validate is False and not utilities.check_recovery():
             print("- Fixing Acceleration in CMIO")
             utilities.process_status(subprocess.run(["defaults", "write", "com.apple.cmio", "CMIO_Unit_Input_ASC.DoNotUseOpenCL", "-bool", "true"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT))
 
